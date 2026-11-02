@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 data/*.csv
 !data/sample_model_data.csv
+mlflow.db
+mlruns/
+mlartifacts/
+models/

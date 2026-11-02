@@ -70,6 +70,12 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 
 
 
+
+
+Note: random forest has the lowest RMSE, but its model file is 190 MB, so the deployed app uses hist. gradient boosting (RMSE 1.21 lakhs, R2 1.000) for the 5-year price.
+
+
+
 Confusion matrix: `reports/confusion\_matrix.png`. Feature importance: `reports/feature\_importance\_\*.csv`.
 
 

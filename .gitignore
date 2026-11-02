@@ -6,4 +6,6 @@ data/*.csv
 mlflow.db
 mlruns/
 mlartifacts/
-models/
+models/*
+!models/best_classification.joblib
+!models/best_regression.joblib

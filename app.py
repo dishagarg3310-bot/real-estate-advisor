@@ -94,6 +94,7 @@ def get_finding(q_number: str):
             return f"**{question.strip()}?**\n\n{answer.strip()}" if answer.strip() else text
     return None
 
+
 def build_frame(base: dict, prices) -> pd.DataFrame:
     """Model-ready rows for one property at one or more prices (lakhs)."""
     prices = np.atleast_1d(np.asarray(prices, dtype=float))
@@ -104,16 +105,73 @@ def build_frame(base: dict, prices) -> pd.DataFrame:
     return df[FEATURES]
 
 
+def evaluate(base: dict, price: float) -> dict:
+    """Predictions and investment metrics for one property."""
+    row = build_frame(base, price)
+    probability = float(clf.predict_proba(row)[0, 1]) * 100
+    future = float(reg.predict(row)[0])
+    return {
+        "price": price,
+        "probability": probability,
+        "future": future,
+        "gain": future - price,
+        "growth": (future / price - 1) * 100,
+        "cagr": ((future / price) ** (1 / HORIZON_YEARS) - 1) * 100,
+        "psf": price * 100000 / base["Size_in_SqFt"],
+    }
+
+
 data = get_data()
 clf, reg = get_models()
 options = {c: sorted(data[c].dropna().unique()) for c in CATEGORICAL_FEATURES}
 
+
+def property_inputs(prefix: str, defaults: dict):
+    """Render one property's inputs (no form) and return (base dict, price)."""
+    k = lambda name: f"{prefix}_{name}"  # noqa: E731
+    state = st.selectbox("State", options["State"], index=defaults["state_idx"], key=k("state"))
+    cities = sorted(data.loc[data["State"] == state, "City"].unique())
+    city = st.selectbox("City", cities, key=k("city"))
+    property_type = st.selectbox("Property type", options["Property_Type"], key=k("type"))
+    furnished = st.selectbox("Furnished status", options["Furnished_Status"], key=k("furn"))
+    owner = st.selectbox("Owner type", options["Owner_Type"], key=k("owner"))
+    availability = st.selectbox("Availability", options["Availability_Status"], key=k("avail"))
+    bhk = st.number_input("BHK", int(data.BHK.min()), int(data.BHK.max()), defaults["bhk"], key=k("bhk"))
+    size = st.number_input("Size (sq ft)", float(data.Size_in_SqFt.min()), float(data.Size_in_SqFt.max()),
+                           defaults["size"], key=k("size"))
+    price = st.number_input("Price (lakhs)", float(data.Price_in_Lakhs.min()), float(data.Price_in_Lakhs.max()),
+                            defaults["price"], key=k("price"))
+    age = st.number_input("Age of property (years)", 0, int(data.Age_of_Property.max()), defaults["age"], key=k("age"))
+    total_floors = st.number_input("Total floors", 1, int(data.Total_Floors.max()), 10, key=k("tf"))
+    floor_no = st.number_input("Floor number", 0, int(data.Floor_No.max()), 3, key=k("fl"))
+    transport = st.selectbox("Public transport access", options["Public_Transport_Accessibility"], key=k("trans"))
+    parking = st.selectbox("Parking space", options["Parking_Space"], key=k("park"))
+    security = st.selectbox("Security", options["Security"], key=k("sec"))
+    facing = st.selectbox("Facing", options["Facing"], key=k("face"))
+    schools = st.slider("Nearby schools", 1, 10, 5, key=k("sch"))
+    hospitals = st.slider("Nearby hospitals", 1, 10, 5, key=k("hos"))
+    chosen = st.multiselect("Amenities", AMENITIES, key=k("amen"))
+    base = {
+        "State": state, "City": city, "Property_Type": property_type, "Furnished_Status": furnished,
+        "Public_Transport_Accessibility": transport, "Parking_Space": parking, "Security": security,
+        "Facing": facing, "Owner_Type": owner, "Availability_Status": availability,
+        "BHK": bhk, "Size_in_SqFt": float(size), "Age_of_Property": age,
+        "Floor_No": floor_no, "Total_Floors": total_floors,
+        "Floor_Inconsistent": int(floor_no > total_floors),
+        "Nearby_Schools": schools, "Nearby_Hospitals": hospitals,
+        "Amenity_Count": len(chosen),
+        **{f"Amenity_{a}": int(a in chosen) for a in AMENITIES},
+    }
+    return base, float(price)
+
+
 st.title("🏠 Real Estate Investment Advisor")
 st.caption("Predicts whether a property is a good investment and its estimated price in 5 years.")
 
-tab_predict, tab_market, tab_eda, tab_batch, tab_model = st.tabs(
-    ["Predict", "Market explorer", "EDA", "Batch", "Model insights"]
+tab_predict, tab_compare, tab_market, tab_eda, tab_batch, tab_model = st.tabs(
+    ["Predict", "Compare", "Market explorer", "EDA", "Batch", "Model insights"]
 )
+
 # ---------------------------------------------------------------- Predict
 with tab_predict:
     with st.form("property"):
@@ -163,19 +221,14 @@ with tab_predict:
     if analysis:
         base, price = analysis["base"], analysis["price"]
         city = base["City"]
-        row = build_frame(base, price)
-
-        probability = float(clf.predict_proba(row)[0, 1])
-        future_price = float(reg.predict(row)[0])
-        gain = future_price - price
-        growth = (future_price / price - 1) * 100
-        cagr = ((future_price / price) ** (1 / HORIZON_YEARS) - 1) * 100
+        res = evaluate(base, price)
+        probability = res["probability"] / 100
 
         st.divider()
         m1, m2, m3 = st.columns(3)
-        m1.metric("Good investment probability", f"{probability * 100:.1f}%")
-        m2.metric("Estimated price in 5 years", f"{future_price:,.1f} lakhs")
-        m3.metric("Expected 5-year growth", f"{growth:+.1f}%")
+        m1.metric("Good investment probability", f"{res['probability']:.1f}%")
+        m2.metric("Estimated price in 5 years", f"{res['future']:,.1f} lakhs")
+        m3.metric("Expected 5-year growth", f"{res['growth']:+.1f}%")
 
         confidence = max(probability, 1 - probability)
         st.progress(confidence, text=f"Model confidence in this verdict: {confidence * 100:.1f}%")
@@ -189,18 +242,17 @@ with tab_predict:
         city_median_price = float(city_rows["Price_in_Lakhs"].median())
         city_median_growth = float((city_rows["Future_Price_5Y"] / city_rows["Price_in_Lakhs"] - 1).median() * 100)
         city_avg_psf = float(city_rows["Price_per_SqFt_Rupees"].mean())
-        this_psf = price * 100000 / base["Size_in_SqFt"]
 
         st.subheader("Investment metrics")
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("5-year CAGR", f"{cagr:.2f}% / year")
-        k2.metric("Total gain in 5 years", f"{gain:+,.1f} lakhs")
+        k1.metric("5-year CAGR", f"{res['cagr']:.2f}% / year")
+        k2.metric("Total gain in 5 years", f"{res['gain']:+,.1f} lakhs")
         k3.metric(f"Price vs {city} median", f"{(price / city_median_price - 1) * 100:+.0f}%",
                   help=f"{city} median price: {city_median_price:,.1f} lakhs")
-        k4.metric(f"Growth vs {city} median", f"{growth - city_median_growth:+.1f} pts",
+        k4.metric(f"Growth vs {city} median", f"{res['growth'] - city_median_growth:+.1f} pts",
                   help=f"{city} median 5-year growth: {city_median_growth:.1f}%")
-        st.caption(f"Your price per sq ft: ₹{this_psf:,.0f} | {city} average: ₹{city_avg_psf:,.0f} "
-                   f"({(this_psf / city_avg_psf - 1) * 100:+.0f}% vs city average)")
+        st.caption(f"Your price per sq ft: ₹{res['psf']:,.0f} | {city} average: ₹{city_avg_psf:,.0f} "
+                   f"({(res['psf'] / city_avg_psf - 1) * 100:+.0f}% vs city average)")
         if base["Floor_Inconsistent"]:
             st.info("Floor number is higher than total floors, so this input was flagged as inconsistent.")
 
@@ -236,6 +288,67 @@ with tab_predict:
         st.caption("Red dashed line = your price. Only the price changes; every other input stays the same. "
                    "Models are trained on a dataset whose targets are derived from price, size and location, "
                    "so treat results as a demo, not financial advice.")
+
+# ---------------------------------------------------------------- Compare
+with tab_compare:
+    st.subheader("Compare two properties")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("### Property A")
+        base_a, price_a = property_inputs("a", {"state_idx": 0, "bhk": 2, "size": 1200.0, "price": 100.0, "age": 5})
+    with col_b:
+        st.markdown("### Property B")
+        base_b, price_b = property_inputs("b", {"state_idx": min(1, len(options["State"]) - 1),
+                                                "bhk": 3, "size": 1500.0, "price": 150.0, "age": 10})
+
+    ra, rb = evaluate(base_a, price_a), evaluate(base_b, price_b)
+
+    st.divider()
+    st.subheader("Result")
+    table = pd.DataFrame({
+        "Metric": ["Location", "Good investment probability", "Verdict", "Price today (lakhs)",
+                   "Estimated price in 5 years (lakhs)", "Total gain (lakhs)", "5-year growth",
+                   "5-year CAGR", "Price per sq ft"],
+        "Property A": [f"{base_a['City']}, {base_a['State']}", f"{ra['probability']:.1f}%",
+                       "Good" if ra["probability"] >= 50 else "Not good", f"{ra['price']:,.1f}",
+                       f"{ra['future']:,.1f}", f"{ra['gain']:+,.1f}", f"{ra['growth']:+.1f}%",
+                       f"{ra['cagr']:.2f}%", f"₹{ra['psf']:,.0f}"],
+        "Property B": [f"{base_b['City']}, {base_b['State']}", f"{rb['probability']:.1f}%",
+                       "Good" if rb["probability"] >= 50 else "Not good", f"{rb['price']:,.1f}",
+                       f"{rb['future']:,.1f}", f"{rb['gain']:+,.1f}", f"{rb['growth']:+.1f}%",
+                       f"{rb['cagr']:.2f}%", f"₹{rb['psf']:,.0f}"],
+    })
+    st.dataframe(table, hide_index=True, use_container_width=True)
+
+    if abs(ra["probability"] - rb["probability"]) >= 0.5:
+        winner, reason = ("A", "higher good-investment probability") if ra["probability"] > rb["probability"] \
+            else ("B", "higher good-investment probability")
+    elif abs(ra["growth"] - rb["growth"]) >= 0.05:
+        winner, reason = ("A", "higher 5-year growth") if ra["growth"] > rb["growth"] else ("B", "higher 5-year growth")
+    else:
+        winner, reason = None, ""
+    if winner:
+        st.success(f"Property {winner} looks better: {reason}.")
+    else:
+        st.info("The two properties look about equal.")
+
+    chart_df = pd.DataFrame({
+        "Property": ["A", "A", "B", "B"],
+        "When": ["Today", "In 5 years", "Today", "In 5 years"],
+        "Price_lakhs": [ra["price"], ra["future"], rb["price"], rb["future"]],
+    })
+    st.altair_chart(
+        alt.Chart(chart_df).mark_bar().encode(
+            x=alt.X("Property:N", title=None),
+            xOffset="When:N",
+            y=alt.Y("Price_lakhs:Q", title="Price (lakhs)"),
+            color=alt.Color("When:N", title=None),
+            tooltip=["Property", "When", alt.Tooltip("Price_lakhs:Q", format=",.1f")],
+        ),
+        use_container_width=True,
+    )
+    st.caption("Models are trained on a dataset whose targets are derived from price, size and location, "
+               "so treat results as a demo, not financial advice.")
 
 # ---------------------------------------------------------------- Market explorer
 with tab_market:
@@ -333,6 +446,7 @@ with tab_eda:
     if findings_path.exists():
         with st.expander("Read all EDA findings"):
             st.markdown(findings_path.read_text(encoding="utf-8"))
+
 # ---------------------------------------------------------------- Batch
 with tab_batch:
     st.subheader("Batch prediction")
@@ -350,7 +464,6 @@ with tab_batch:
     if uploaded is not None:
         batch = pd.read_csv(uploaded)
 
-        # Recalculate derived columns when absent
         if "Price_per_SqFt_Rupees" not in batch and {"Price_in_Lakhs", "Size_in_SqFt"} <= set(batch):
             batch["Price_per_SqFt_Rupees"] = batch["Price_in_Lakhs"] * 100000 / batch["Size_in_SqFt"]
         if "Floor_Inconsistent" not in batch and {"Floor_No", "Total_Floors"} <= set(batch):
@@ -385,7 +498,8 @@ with tab_batch:
             front = ["Verdict", "Good_Investment_Probability_%", "Future_Price_5Y_Lakhs", "Growth_%"]
             st.dataframe(result[front + [c for c in result.columns if c not in front]], hide_index=True)
             st.download_button("Download results (CSV)", result.to_csv(index=False).encode("utf-8"),
-                file_name="predictions.csv", mime="text/csv", type="primary")
+                               file_name="predictions.csv", mime="text/csv", type="primary")
+
 # ---------------------------------------------------------------- Model insights
 with tab_model:
     st.subheader("Model comparison (test set, 50,000 rows)")

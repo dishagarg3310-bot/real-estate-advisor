@@ -1,21 +1,21 @@
-Price_in_Lakhs,State,City,Property_Type,Furnished_Status,Public_Transport_Accessibility,Parking_Space,Security,Facing,Owner_Type,Availability_Status,BHK,Size_in_SqFt,Price_per_SqFt_Rupees,Age_of_Property,Floor_No,Total_Floors,Floor_Inconsistent,Nearby_Schools,Nearby_Hospitals,Infrastructure_Score,Amenity_Count,Amenity_Clubhouse,Amenity_Garden,Amenity_Gym,Amenity_Playground,Amenity_Pool
-108.05,Karnataka,Bangalore,Apartment,Furnished,Medium,No,No,North,Owner,Ready_to_Move,5,3342,3233.0939557151405,12,14,27,0,4,1,0.2833333333333333,4,1,0,1,1,1
-25.74,Chhattisgarh,Bilaspur,Villa,Furnished,Medium,Yes,Yes,South,Builder,Ready_to_Move,2,4417,582.7484718134481,24,5,3,1,7,5,0.55,3,0,1,1,0,1
-41.04,Chhattisgarh,Raipur,Apartment,Furnished,High,Yes,Yes,South,Owner,Under_Construction,4,1850,2218.3783783783783,11,27,6,1,2,9,0.6111111111111112,1,0,1,0,0,0
-249.55,Uttarakhand,Haridwar,Apartment,Unfurnished,Low,No,Yes,South,Owner,Ready_to_Move,1,3204,7788.701622971286,11,18,30,0,3,7,0.28888888888888886,4,1,1,0,1,1
-54.48,Tamil Nadu,Coimbatore,Apartment,Semi-furnished,Medium,Yes,No,West,Builder,Under_Construction,1,4646,1172.6216099870858,17,18,5,1,4,8,0.5166666666666667,5,1,1,1,1,1
-282.01,Tamil Nadu,Chennai,Independent House,Unfurnished,Medium,Yes,No,North,Owner,Under_Construction,1,1927,14634.665282823042,11,23,5,1,6,6,0.5388888888888889,2,1,0,0,1,0
-89.84,Punjab,Amritsar,Villa,Furnished,Low,No,No,West,Broker,Under_Construction,4,4248,2114.8775894538608,21,24,25,0,2,6,0.2111111111111111,4,0,1,1,1,1
-494.12,Chhattisgarh,Bilaspur,Villa,Unfurnished,Medium,No,Yes,South,Builder,Under_Construction,2,2351,21017.439387494684,26,15,8,1,7,2,0.44999999999999996,3,1,1,0,0,1
-263.59,Bihar,Patna,Villa,Furnished,Medium,No,No,North,Builder,Ready_to_Move,4,1257,20969.769291964993,23,6,29,0,4,10,0.5833333333333334,1,0,0,1,0,0
-451.46,Assam,Silchar,Villa,Semi-furnished,Medium,Yes,No,West,Owner,Under_Construction,5,3818,11824.515453116815,20,23,10,1,9,5,0.638888888888889,3,0,0,1,1,1
-401.86,Jharkhand,Jamshedpur,Independent House,Furnished,Low,Yes,Yes,North,Broker,Ready_to_Move,3,4030,9971.712158808932,28,0,18,0,10,10,0.7,1,0,0,0,1,0
-40.57,Punjab,Ludhiana,Villa,Semi-furnished,Medium,No,Yes,North,Broker,Ready_to_Move,4,3113,1303.2444587214904,6,19,30,0,1,10,0.44999999999999996,4,1,1,1,1,0
-124.18,Andhra Pradesh,Vijayawada,Apartment,Semi-furnished,Medium,Yes,No,South,Broker,Ready_to_Move,5,3971,3127.171996978091,24,1,29,0,5,9,0.5944444444444444,1,0,0,1,0,0
-456.93,Haryana,Faridabad,Independent House,Semi-furnished,Low,Yes,Yes,North,Owner,Ready_to_Move,3,2269,20137.946231820184,19,27,29,0,4,8,0.3666666666666667,2,1,0,1,0,0
-146.61,Gujarat,Surat,Villa,Unfurnished,Medium,No,No,West,Builder,Under_Construction,2,588,24933.67346938776,19,28,27,1,7,3,0.4833333333333333,5,1,1,1,1,1
-205.33,Telangana,Hyderabad,Apartment,Furnished,Low,Yes,No,East,Broker,Ready_to_Move,2,1256,16347.929936305733,27,13,21,0,1,1,0.0,5,1,1,1,1,1
-418.0,Madhya Pradesh,Bhopal,Villa,Unfurnished,High,Yes,Yes,East,Owner,Ready_to_Move,1,2612,16003.062787136294,20,10,13,0,5,7,0.6777777777777778,4,1,1,1,0,1
-38.34,Odisha,Bhubaneswar,Independent House,Semi-furnished,Low,Yes,Yes,East,Broker,Under_Construction,4,1580,2426.582278481013,7,13,14,0,6,8,0.4555555555555556,1,1,0,0,0,0
-436.38,Karnataka,Bangalore,Villa,Semi-furnished,Low,No,No,East,Builder,Under_Construction,2,1042,41879.07869481766,22,1,17,0,2,8,0.2777777777777778,4,1,0,1,1,1
-83.55,Gujarat,Ahmedabad,Apartment,Semi-furnished,Medium,No,Yes,North,Builder,Ready_to_Move,5,1294,6456.723338485317,7,30,1,1,10,7,0.75,1,0,1,0,0,0
+State,City,Property_Type,Furnished_Status,Public_Transport_Accessibility,Parking_Space,Security,Facing,Owner_Type,Availability_Status,BHK,Size_in_SqFt,Price_in_Lakhs,Price_per_SqFt_Rupees,Age_of_Property,Floor_No,Total_Floors,Floor_Inconsistent,Nearby_Schools,Nearby_Hospitals,Infrastructure_Score,Amenity_Count,Amenity_Clubhouse,Amenity_Garden,Amenity_Gym,Amenity_Playground,Amenity_Pool
+Karnataka,Bangalore,Apartment,Furnished,Medium,No,No,North,Owner,Ready_to_Move,5,3342,108.05,3233.0939557151405,12,14,27,0,4,1,0.2833333333333333,4,1,0,1,1,1
+Chhattisgarh,Bilaspur,Villa,Furnished,Medium,Yes,Yes,South,Builder,Ready_to_Move,2,4417,25.74,582.7484718134481,24,5,3,1,7,5,0.55,3,0,1,1,0,1
+Chhattisgarh,Raipur,Apartment,Furnished,High,Yes,Yes,South,Owner,Under_Construction,4,1850,41.04,2218.3783783783783,11,27,6,1,2,9,0.6111111111111112,1,0,1,0,0,0
+Uttarakhand,Haridwar,Apartment,Unfurnished,Low,No,Yes,South,Owner,Ready_to_Move,1,3204,249.55,7788.701622971286,11,18,30,0,3,7,0.28888888888888886,4,1,1,0,1,1
+Tamil Nadu,Coimbatore,Apartment,Semi-furnished,Medium,Yes,No,West,Builder,Under_Construction,1,4646,54.48,1172.6216099870858,17,18,5,1,4,8,0.5166666666666667,5,1,1,1,1,1
+Tamil Nadu,Chennai,Independent House,Unfurnished,Medium,Yes,No,North,Owner,Under_Construction,1,1927,282.01,14634.665282823042,11,23,5,1,6,6,0.5388888888888889,2,1,0,0,1,0
+Punjab,Amritsar,Villa,Furnished,Low,No,No,West,Broker,Under_Construction,4,4248,89.84,2114.8775894538608,21,24,25,0,2,6,0.2111111111111111,4,0,1,1,1,1
+Chhattisgarh,Bilaspur,Villa,Unfurnished,Medium,No,Yes,South,Builder,Under_Construction,2,2351,494.12,21017.439387494684,26,15,8,1,7,2,0.44999999999999996,3,1,1,0,0,1
+Bihar,Patna,Villa,Furnished,Medium,No,No,North,Builder,Ready_to_Move,4,1257,263.59,20969.769291964993,23,6,29,0,4,10,0.5833333333333334,1,0,0,1,0,0
+Assam,Silchar,Villa,Semi-furnished,Medium,Yes,No,West,Owner,Under_Construction,5,3818,451.46,11824.515453116815,20,23,10,1,9,5,0.638888888888889,3,0,0,1,1,1
+Jharkhand,Jamshedpur,Independent House,Furnished,Low,Yes,Yes,North,Broker,Ready_to_Move,3,4030,401.86,9971.712158808932,28,0,18,0,10,10,0.7,1,0,0,0,1,0
+Punjab,Ludhiana,Villa,Semi-furnished,Medium,No,Yes,North,Broker,Ready_to_Move,4,3113,40.57,1303.2444587214904,6,19,30,0,1,10,0.44999999999999996,4,1,1,1,1,0
+Andhra Pradesh,Vijayawada,Apartment,Semi-furnished,Medium,Yes,No,South,Broker,Ready_to_Move,5,3971,124.18,3127.171996978091,24,1,29,0,5,9,0.5944444444444444,1,0,0,1,0,0
+Haryana,Faridabad,Independent House,Semi-furnished,Low,Yes,Yes,North,Owner,Ready_to_Move,3,2269,456.93,20137.946231820184,19,27,29,0,4,8,0.3666666666666667,2,1,0,1,0,0
+Gujarat,Surat,Villa,Unfurnished,Medium,No,No,West,Builder,Under_Construction,2,588,146.61,24933.67346938776,19,28,27,1,7,3,0.4833333333333333,5,1,1,1,1,1
+Telangana,Hyderabad,Apartment,Furnished,Low,Yes,No,East,Broker,Ready_to_Move,2,1256,205.33,16347.929936305733,27,13,21,0,1,1,0.0,5,1,1,1,1,1
+Madhya Pradesh,Bhopal,Villa,Unfurnished,High,Yes,Yes,East,Owner,Ready_to_Move,1,2612,418.0,16003.062787136294,20,10,13,0,5,7,0.6777777777777778,4,1,1,1,0,1
+Odisha,Bhubaneswar,Independent House,Semi-furnished,Low,Yes,Yes,East,Broker,Under_Construction,4,1580,38.34,2426.582278481013,7,13,14,0,6,8,0.4555555555555556,1,1,0,0,0,0
+Karnataka,Bangalore,Villa,Semi-furnished,Low,No,No,East,Builder,Under_Construction,2,1042,436.38,41879.07869481766,22,1,17,0,2,8,0.2777777777777778,4,1,0,1,1,1
+Gujarat,Ahmedabad,Apartment,Semi-furnished,Medium,No,Yes,North,Builder,Ready_to_Move,5,1294,83.55,6456.723338485317,7,30,1,1,10,7,0.75,1,0,1,0,0,0

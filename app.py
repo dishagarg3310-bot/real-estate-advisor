@@ -111,8 +111,9 @@ options = {c: sorted(data[c].dropna().unique()) for c in CATEGORICAL_FEATURES}
 st.title("🏠 Real Estate Investment Advisor")
 st.caption("Predicts whether a property is a good investment and its estimated price in 5 years.")
 
-tab_predict, tab_market, tab_eda, tab_model = st.tabs(["Predict", "Market explorer", "EDA", "Model insights"])
-
+tab_predict, tab_market, tab_eda, tab_batch, tab_model = st.tabs(
+    ["Predict", "Market explorer", "EDA", "Batch", "Model insights"]
+)
 # ---------------------------------------------------------------- Predict
 with tab_predict:
     with st.form("property"):
@@ -332,7 +333,59 @@ with tab_eda:
     if findings_path.exists():
         with st.expander("Read all EDA findings"):
             st.markdown(findings_path.read_text(encoding="utf-8"))
+# ---------------------------------------------------------------- Batch
+with tab_batch:
+    st.subheader("Batch prediction")
+    st.write("Upload a CSV with one property per row. It must contain these columns: "
+             + ", ".join(f"`{c}`" for c in FEATURES))
+    st.caption("Tip: `Infrastructure_Score`, `Price_per_SqFt_Rupees`, `Amenity_Count` and `Floor_Inconsistent` "
+               "are recalculated automatically if missing.")
 
+    sample_path = Path("docs") / "sample_batch.csv"
+    if sample_path.exists():
+        st.download_button("Download sample CSV", sample_path.read_bytes(),
+                           file_name="sample_batch.csv", mime="text/csv")
+
+    uploaded = st.file_uploader("Upload CSV", type="csv")
+    if uploaded is not None:
+        batch = pd.read_csv(uploaded)
+
+        # Recalculate derived columns when absent
+        if "Price_per_SqFt_Rupees" not in batch and {"Price_in_Lakhs", "Size_in_SqFt"} <= set(batch):
+            batch["Price_per_SqFt_Rupees"] = batch["Price_in_Lakhs"] * 100000 / batch["Size_in_SqFt"]
+        if "Floor_Inconsistent" not in batch and {"Floor_No", "Total_Floors"} <= set(batch):
+            batch["Floor_Inconsistent"] = (batch["Floor_No"] > batch["Total_Floors"]).astype(int)
+        amenity_flags = [f"Amenity_{a}" for a in AMENITIES]
+        if "Amenity_Count" not in batch and set(amenity_flags) <= set(batch):
+            batch["Amenity_Count"] = batch[amenity_flags].sum(axis=1)
+        if "Infrastructure_Score" not in batch and {
+            "Nearby_Schools", "Nearby_Hospitals", "Public_Transport_Accessibility"
+        } <= set(batch):
+            batch["Infrastructure_Score"] = compute_infrastructure_score(batch)
+
+        missing = [c for c in FEATURES if c not in batch.columns]
+        if missing:
+            st.error("Missing columns: " + ", ".join(missing))
+        elif len(batch) > 20000:
+            st.error("Please upload at most 20,000 rows.")
+        else:
+            X = batch[FEATURES]
+            result = batch.copy()
+            result["Good_Investment_Probability_%"] = (clf.predict_proba(X)[:, 1] * 100).round(1)
+            result["Verdict"] = np.where(result["Good_Investment_Probability_%"] >= 50,
+                                         "Good investment", "Not a good investment")
+            result["Future_Price_5Y_Lakhs"] = reg.predict(X).round(2)
+            result["Growth_%"] = ((result["Future_Price_5Y_Lakhs"] / result["Price_in_Lakhs"] - 1) * 100).round(1)
+
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Properties", f"{len(result):,}")
+            s2.metric("Good investments", f"{(result['Verdict'] == 'Good investment').mean() * 100:.1f}%")
+            s3.metric("Average 5-year growth", f"{result['Growth_%'].mean():+.1f}%")
+
+            front = ["Verdict", "Good_Investment_Probability_%", "Future_Price_5Y_Lakhs", "Growth_%"]
+            st.dataframe(result[front + [c for c in result.columns if c not in front]], hide_index=True)
+            st.download_button("Download results (CSV)", result.to_csv(index=False).encode("utf-8"),
+                file_name="predictions.csv", mime="text/csv", type="primary")
 # ---------------------------------------------------------------- Model insights
 with tab_model:
     st.subheader("Model comparison (test set, 50,000 rows)")

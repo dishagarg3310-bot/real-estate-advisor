@@ -9,7 +9,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-DATA_PATH = Path("data") / "model_data.csv"
+DATA_PATH = Path("data") / "model_data.csv.gz"
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
 

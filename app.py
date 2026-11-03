@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from features import (  # noqa: E402
     CATEGORICAL_FEATURES,
     FEATURES,
+    NUMERIC_FEATURES,
     compute_infrastructure_score,
     load_data,
 )
@@ -120,7 +121,28 @@ def evaluate(base: dict, price: float) -> dict:
         "psf": price * 100000 / base["Size_in_SqFt"],
     }
 
+@st.cache_data(show_spinner="Computing SHAP values...")
+def explain_row(items: tuple, task: str):
+    """SHAP values (permutation explainer) for one property. task: 'clf' or 'reg'."""
+    import shap
 
+    model = clf if task == "clf" else reg
+    row = pd.DataFrame([dict(items)])[FEATURES]
+    background = data[FEATURES].sample(50, random_state=7).reset_index(drop=True)
+
+    def predict(arr):
+        df = pd.DataFrame(arr, columns=FEATURES)
+        df[NUMERIC_FEATURES] = df[NUMERIC_FEATURES].astype(float)
+        return model.predict_proba(df)[:, 1] if task == "clf" else model.predict(df)
+
+    masker = shap.maskers.Independent(background.to_numpy(dtype=object), max_samples=50)
+    explainer = shap.explainers.Permutation(predict, masker)
+    result = explainer(row.to_numpy(dtype=object), max_evals=600)
+
+    out = pd.DataFrame({"Feature": FEATURES, "Value": row.iloc[0].astype(str).values,
+                        "Impact": result.values[0]})
+    out = out.reindex(out["Impact"].abs().sort_values(ascending=False).index).reset_index(drop=True)
+    return float(result.base_values[0]), out
 data = get_data()
 clf, reg = get_models()
 options = {c: sorted(data[c].dropna().unique()) for c in CATEGORICAL_FEATURES}
@@ -168,10 +190,9 @@ def property_inputs(prefix: str, defaults: dict):
 st.title("🏠 Real Estate Investment Advisor")
 st.caption("Predicts whether a property is a good investment and its estimated price in 5 years.")
 
-tab_predict, tab_compare, tab_market, tab_eda, tab_batch, tab_model = st.tabs(
-    ["Predict", "Compare", "Market explorer", "EDA", "Batch", "Model insights"]
+tab_predict, tab_compare, tab_picks, tab_market, tab_eda, tab_batch, tab_model = st.tabs(
+    ["Predict", "Compare", "Top picks", "Market explorer", "EDA", "Batch", "Model insights"]
 )
-
 # ---------------------------------------------------------------- Predict
 with tab_predict:
     with st.form("property"):
@@ -255,7 +276,37 @@ with tab_predict:
                    f"({(res['psf'] / city_avg_psf - 1) * 100:+.0f}% vs city average)")
         if base["Floor_Inconsistent"]:
             st.info("Floor number is higher than total floors, so this input was flagged as inconsistent.")
-
+	        # ---- SHAP explanation
+        st.subheader("Why this verdict?")
+        if st.toggle("Explain this prediction (SHAP)", key="shap_on"):
+            task_label = st.radio("Explain", ["Good investment probability", "Estimated 5-year price"],
+                                  horizontal=True, key="shap_task")
+            task = "clf" if task_label.startswith("Good") else "reg"
+            scale, unit = (100, "percentage points") if task == "clf" else (1, "lakhs")
+            shap_row = build_frame(base, price)
+            items = tuple((c, shap_row.iloc[0][c]) for c in FEATURES)
+            try:
+                base_value, imp = explain_row(items, task)
+                imp = imp.assign(Impact=imp["Impact"] * scale)
+                this_value = res["probability"] if task == "clf" else res["future"]
+                st.write(f"Average prediction on a market sample: **{base_value * scale:,.1f}**. "
+                         f"For this property: **{this_value:,.1f}**.")
+                st.markdown("**Top 3 drivers**")
+                for _, r in imp.head(3).iterrows():
+                    st.write(f"- **{r['Feature']}** = {r['Value']}: {r['Impact']:+.1f} {unit}")
+                st.altair_chart(
+                    alt.Chart(imp.head(10)).mark_bar().encode(
+                        x=alt.X("Impact:Q", title=f"Impact on prediction ({unit})"),
+                        y=alt.Y("Feature:N", sort=None, title=None),
+                        color=alt.condition(alt.datum.Impact > 0, alt.value("#2ca02c"), alt.value("#d62728")),
+                        tooltip=["Feature", "Value", alt.Tooltip("Impact:Q", format="+.2f")],
+                    ),
+                    width="stretch",
+                )
+                st.caption("Green pushes the prediction up, red pushes it down, compared with the average property. "
+                           "Price and size dominate because the targets are derived from them.")
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Explanation unavailable: {exc}")
         # ---- What-if chart
         st.subheader("What if the price changes?")
         pmin, pmax = float(data.Price_in_Lakhs.min()), float(data.Price_in_Lakhs.max())
@@ -275,7 +326,7 @@ with tab_predict:
                 y=alt.Y("Probability:Q", title="Good investment probability (%)", scale=alt.Scale(domain=[0, 100])),
                 tooltip=[alt.Tooltip("Price:Q", format=",.1f"), alt.Tooltip("Probability:Q", format=".1f")],
             ) + marker,
-            use_container_width=True,
+            width="stretch",
         )
         w2.altair_chart(
             alt.Chart(whatif).mark_line(point=True, color="#2ca02c").encode(
@@ -349,6 +400,64 @@ with tab_compare:
     )
     st.caption("Models are trained on a dataset whose targets are derived from price, size and location, "
                "so treat results as a demo, not financial advice.")
+
+# ---------------------------------------------------------------- Top picks
+with tab_picks:
+    st.subheader("Top picks by predicted growth")
+    st.caption("Filter the market, then the model scores a sample of matching properties and ranks them.")
+
+    pmin, pmax = float(data.Price_in_Lakhs.min()), float(data.Price_in_Lakhs.max())
+    smin, smax = int(data.Size_in_SqFt.min()), int(data.Size_in_SqFt.max())
+    t1, t2, t3, t4 = st.columns(4)
+    p_states = t1.multiselect("State", options["State"], key="tp_state")
+    p_bhks = t2.multiselect("BHK", sorted(data["BHK"].unique()), key="tp_bhk")
+    p_price = t3.slider("Price (lakhs)", pmin, pmax, (pmin, pmax), step=5.0, key="tp_price")
+    p_size = t4.slider("Size (sq ft)", smin, smax, (smin, smax), step=50, key="tp_size")
+    u1, u2, u3 = st.columns(3)
+    p_avail = u1.multiselect("Availability", options["Availability_Status"], key="tp_avail")
+    p_sample = u2.select_slider("Properties to score", [1000, 2000, 5000, 10000], value=5000, key="tp_sample")
+    p_rank = u3.selectbox("Rank by", ["Expected 5-year growth", "Good investment probability"], key="tp_rank")
+
+    pool = data[data["Price_in_Lakhs"].between(*p_price) & data["Size_in_SqFt"].between(*p_size)]
+    if p_states:
+        pool = pool[pool["State"].isin(p_states)]
+    if p_bhks:
+        pool = pool[pool["BHK"].isin(p_bhks)]
+    if p_avail:
+        pool = pool[pool["Availability_Status"].isin(p_avail)]
+
+    if pool.empty:
+        st.warning("No properties match these filters.")
+    else:
+        scored = pool.sample(min(p_sample, len(pool)), random_state=42).copy()
+        X_pick = scored[FEATURES]
+        scored["Probability_%"] = (clf.predict_proba(X_pick)[:, 1] * 100).round(1)
+        scored["Predicted_Price_5Y"] = reg.predict(X_pick).round(1)
+        scored["Growth_%"] = ((scored["Predicted_Price_5Y"] / scored["Price_in_Lakhs"] - 1) * 100).round(1)
+        scored["CAGR_%"] = (((scored["Predicted_Price_5Y"] / scored["Price_in_Lakhs"]) ** (1 / HORIZON_YEARS) - 1) * 100).round(2)
+
+        sort_col = "Growth_%" if p_rank == "Expected 5-year growth" else "Probability_%"
+        top10 = scored.sort_values([sort_col, "Growth_%"], ascending=False).head(10).reset_index(drop=True)
+        top10.insert(0, "Rank", range(1, len(top10) + 1))
+
+        st.caption(f"{len(pool):,} properties match; scored {len(scored):,} of them.")
+        cols = ["Rank", "State", "City", "Property_Type", "BHK", "Size_in_SqFt", "Price_in_Lakhs",
+                "Predicted_Price_5Y", "Growth_%", "CAGR_%", "Probability_%", "Availability_Status"]
+        st.dataframe(top10[cols], hide_index=True, width="stretch")
+
+        st.altair_chart(
+            alt.Chart(top10).mark_bar().encode(
+                x=alt.X("Growth_%:Q", title="Expected 5-year growth (%)"),
+                y=alt.Y("Rank:O", sort="ascending", title="Rank"),
+                color=alt.Color("Probability_%:Q", title="Good investment %", scale=alt.Scale(scheme="greens")),
+                tooltip=["City", "Property_Type", "BHK", "Price_in_Lakhs", "Growth_%", "Probability_%"],
+            ),
+            width="stretch",
+        )
+        st.download_button("Download top 10 (CSV)", top10[cols].to_csv(index=False).encode("utf-8"),
+                           file_name="top_picks.csv", mime="text/csv")
+        st.caption("Models are trained on a dataset whose targets are derived from price, size and location, "
+            "so treat results as a demo, not financial advice.")
 
 # ---------------------------------------------------------------- Market explorer
 with tab_market:

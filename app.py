@@ -1,9 +1,11 @@
 """Real Estate Investment Advisor - run with: streamlit run app.py"""
+import re
 import sys
 from pathlib import Path
 
 import altair as alt
 import joblib
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -16,6 +18,30 @@ from features import (  # noqa: E402
 )
 
 AMENITIES = ["Clubhouse", "Garden", "Gym", "Playground", "Pool"]
+HORIZON_YEARS = 5
+
+EDA_QUESTIONS = {
+    "Q1. Distribution of property prices": "eda_q01_price_distribution.png",
+    "Q2. Distribution of property sizes": "eda_q02_size_distribution.png",
+    "Q3. Price per sq ft by property type": "eda_q03_ppsf_by_type.png",
+    "Q4. Property size vs price": "eda_q04_size_vs_price.png",
+    "Q5. Outliers in price per sq ft and size": "eda_q05_outliers.png",
+    "Q6. Average price per sq ft by state": "eda_q06_ppsf_by_state.png",
+    "Q7. Average property price by city": "eda_q07_price_by_city.png",
+    "Q8. Median age of properties by locality": "eda_q08_age_by_locality.png",
+    "Q9. BHK distribution across cities": "eda_q09_bhk_by_city.png",
+    "Q10. Price trends, top 5 expensive localities": "eda_q10_top5_locality_trend.png",
+    "Q11. Correlation between numeric features": "eda_q11_correlation_heatmap.png",
+    "Q12. Nearby schools vs price per sq ft": "eda_q12_schools_vs_ppsf.png",
+    "Q13. Nearby hospitals vs price per sq ft": "eda_q13_hospitals_vs_ppsf.png",
+    "Q14. Price by furnished status": "eda_q14_price_by_furnished.png",
+    "Q15. Price per sq ft by facing direction": "eda_q15_ppsf_by_facing.png",
+    "Q16. Properties by owner type": "eda_q16_owner_type.png",
+    "Q17. Properties by availability status": "eda_q17_availability.png",
+    "Q18. Does parking space affect price?": "eda_q18_parking.png",
+    "Q19. Amenities vs price per sq ft": "eda_q19_amenities.png",
+    "Q20. Public transport vs price per sq ft": "eda_q20_transport.png",
+}
 
 st.set_page_config(page_title="Real Estate Advisor", page_icon="🏠", layout="wide")
 
@@ -44,6 +70,40 @@ def importance_chart(df: pd.DataFrame, label: str):
     )
 
 
+def get_finding(q_number: str):
+    """Return question + answer text for one EDA question from reports/eda_findings.md."""
+    path = Path("reports") / "eda_findings.md"
+    if not path.exists():
+        return None
+    lines = path.read_text(encoding="utf-8").splitlines()
+    for i, line in enumerate(lines):
+        clean = line.replace("*", "").lstrip("#-• ").strip()
+        if re.match(rf"^{q_number}\.\s", clean):
+            parts = [clean]
+            for nxt in lines[i + 1:]:
+                nxt_clean = nxt.replace("*", "").strip()
+                if not nxt_clean:
+                    if len(parts) > 1:
+                        break
+                    continue
+                if re.match(r"^\d+\.\s", nxt_clean) or nxt_clean.startswith(("Section", "Overall")):
+                    break
+                parts.append(nxt_clean)
+            text = " ".join(parts).split("Chart:")[0].strip()
+            question, _, answer = text.partition("?")
+            return f"**{question.strip()}?**\n\n{answer.strip()}" if answer.strip() else text
+    return None
+
+def build_frame(base: dict, prices) -> pd.DataFrame:
+    """Model-ready rows for one property at one or more prices (lakhs)."""
+    prices = np.atleast_1d(np.asarray(prices, dtype=float))
+    df = pd.DataFrame([base] * len(prices))
+    df["Price_in_Lakhs"] = prices
+    df["Price_per_SqFt_Rupees"] = prices * 100000 / df["Size_in_SqFt"]
+    df["Infrastructure_Score"] = compute_infrastructure_score(df)
+    return df[FEATURES]
+
+
 data = get_data()
 clf, reg = get_models()
 options = {c: sorted(data[c].dropna().unique()) for c in CATEGORICAL_FEATURES}
@@ -51,7 +111,7 @@ options = {c: sorted(data[c].dropna().unique()) for c in CATEGORICAL_FEATURES}
 st.title("🏠 Real Estate Investment Advisor")
 st.caption("Predicts whether a property is a good investment and its estimated price in 5 years.")
 
-tab_predict, tab_market, tab_model = st.tabs(["Predict", "Market explorer", "Model insights"])
+tab_predict, tab_market, tab_eda, tab_model = st.tabs(["Predict", "Market explorer", "EDA", "Model insights"])
 
 # ---------------------------------------------------------------- Predict
 with tab_predict:
@@ -68,7 +128,7 @@ with tab_predict:
         with c2:
             bhk = st.number_input("BHK", int(data.BHK.min()), int(data.BHK.max()), 2)
             size = st.number_input("Size (sq ft)", float(data.Size_in_SqFt.min()), float(data.Size_in_SqFt.max()), 1200.0)
-            price = st.number_input("Price (lakhs)", float(data.Price_in_Lakhs.min()), float(data.Price_in_Lakhs.max()), 100.0)
+            price_in = st.number_input("Price (lakhs)", float(data.Price_in_Lakhs.min()), float(data.Price_in_Lakhs.max()), 100.0)
             age = st.number_input("Age of property (years)", 0, int(data.Age_of_Property.max()), 5)
             total_floors = st.number_input("Total floors", 1, int(data.Total_Floors.max()), 10)
             floor_no = st.number_input("Floor number", 0, int(data.Floor_No.max()), 3)
@@ -83,25 +143,34 @@ with tab_predict:
         submitted = st.form_submit_button("Analyse property", type="primary")
 
     if submitted:
-        row = pd.DataFrame([{
-            "State": state, "City": city, "Property_Type": property_type, "Furnished_Status": furnished,
-            "Public_Transport_Accessibility": transport, "Parking_Space": parking, "Security": security,
-            "Facing": facing, "Owner_Type": owner, "Availability_Status": availability,
-            "BHK": bhk, "Size_in_SqFt": size, "Price_in_Lakhs": price,
-            "Price_per_SqFt_Rupees": price * 100000 / size, "Age_of_Property": age,
-            "Floor_No": floor_no, "Total_Floors": total_floors,
-            "Floor_Inconsistent": int(floor_no > total_floors),
-            "Nearby_Schools": schools, "Nearby_Hospitals": hospitals,
-            "Amenity_Count": len(chosen),
-            **{f"Amenity_{a}": int(a in chosen) for a in AMENITIES},
-        }])
-        row["Infrastructure_Score"] = compute_infrastructure_score(row)
-        row = row[FEATURES]
+        st.session_state["analysis"] = {
+            "price": float(price_in),
+            "base": {
+                "State": state, "City": city, "Property_Type": property_type, "Furnished_Status": furnished,
+                "Public_Transport_Accessibility": transport, "Parking_Space": parking, "Security": security,
+                "Facing": facing, "Owner_Type": owner, "Availability_Status": availability,
+                "BHK": bhk, "Size_in_SqFt": float(size), "Age_of_Property": age,
+                "Floor_No": floor_no, "Total_Floors": total_floors,
+                "Floor_Inconsistent": int(floor_no > total_floors),
+                "Nearby_Schools": schools, "Nearby_Hospitals": hospitals,
+                "Amenity_Count": len(chosen),
+                **{f"Amenity_{a}": int(a in chosen) for a in AMENITIES},
+            },
+        }
+
+    analysis = st.session_state.get("analysis")
+    if analysis:
+        base, price = analysis["base"], analysis["price"]
+        city = base["City"]
+        row = build_frame(base, price)
 
         probability = float(clf.predict_proba(row)[0, 1])
         future_price = float(reg.predict(row)[0])
+        gain = future_price - price
         growth = (future_price / price - 1) * 100
+        cagr = ((future_price / price) ** (1 / HORIZON_YEARS) - 1) * 100
 
+        st.divider()
         m1, m2, m3 = st.columns(3)
         m1.metric("Good investment probability", f"{probability * 100:.1f}%")
         m2.metric("Estimated price in 5 years", f"{future_price:,.1f} lakhs")
@@ -109,19 +178,62 @@ with tab_predict:
 
         confidence = max(probability, 1 - probability)
         st.progress(confidence, text=f"Model confidence in this verdict: {confidence * 100:.1f}%")
-
         if probability >= 0.5:
             st.success("Verdict: Good investment")
         else:
             st.warning("Verdict: Not a good investment")
 
-        city_avg = data.loc[data["City"] == city, "Price_per_SqFt_Rupees"].mean()
-        this_psf = price * 100000 / size
-        st.caption(f"Your price per sq ft: ₹{this_psf:,.0f} | {city} average: ₹{city_avg:,.0f} "
-                   f"({(this_psf / city_avg - 1) * 100:+.0f}% vs city average)")
-        if floor_no > total_floors:
+        # ---- Investment metrics
+        city_rows = data[data["City"] == city]
+        city_median_price = float(city_rows["Price_in_Lakhs"].median())
+        city_median_growth = float((city_rows["Future_Price_5Y"] / city_rows["Price_in_Lakhs"] - 1).median() * 100)
+        city_avg_psf = float(city_rows["Price_per_SqFt_Rupees"].mean())
+        this_psf = price * 100000 / base["Size_in_SqFt"]
+
+        st.subheader("Investment metrics")
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("5-year CAGR", f"{cagr:.2f}% / year")
+        k2.metric("Total gain in 5 years", f"{gain:+,.1f} lakhs")
+        k3.metric(f"Price vs {city} median", f"{(price / city_median_price - 1) * 100:+.0f}%",
+                  help=f"{city} median price: {city_median_price:,.1f} lakhs")
+        k4.metric(f"Growth vs {city} median", f"{growth - city_median_growth:+.1f} pts",
+                  help=f"{city} median 5-year growth: {city_median_growth:.1f}%")
+        st.caption(f"Your price per sq ft: ₹{this_psf:,.0f} | {city} average: ₹{city_avg_psf:,.0f} "
+                   f"({(this_psf / city_avg_psf - 1) * 100:+.0f}% vs city average)")
+        if base["Floor_Inconsistent"]:
             st.info("Floor number is higher than total floors, so this input was flagged as inconsistent.")
-        st.caption("Models are trained on a dataset whose targets are derived from price, size and location, "
+
+        # ---- What-if chart
+        st.subheader("What if the price changes?")
+        pmin, pmax = float(data.Price_in_Lakhs.min()), float(data.Price_in_Lakhs.max())
+        grid = np.linspace(max(pmin, price * 0.5), min(pmax, price * 1.5), 30)
+        grid = np.unique(np.append(grid, price))
+        whatif_rows = build_frame(base, grid)
+        whatif = pd.DataFrame({
+            "Price": grid,
+            "Probability": clf.predict_proba(whatif_rows)[:, 1] * 100,
+            "Future_price": reg.predict(whatif_rows),
+        })
+        marker = alt.Chart(pd.DataFrame({"Price": [price]})).mark_rule(strokeDash=[5, 4], color="#ff4b4b").encode(x="Price:Q")
+        w1, w2 = st.columns(2)
+        w1.altair_chart(
+            alt.Chart(whatif).mark_line(point=True).encode(
+                x=alt.X("Price:Q", title="Price (lakhs)", scale=alt.Scale(zero=False)),
+                y=alt.Y("Probability:Q", title="Good investment probability (%)", scale=alt.Scale(domain=[0, 100])),
+                tooltip=[alt.Tooltip("Price:Q", format=",.1f"), alt.Tooltip("Probability:Q", format=".1f")],
+            ) + marker,
+            use_container_width=True,
+        )
+        w2.altair_chart(
+            alt.Chart(whatif).mark_line(point=True, color="#2ca02c").encode(
+                x=alt.X("Price:Q", title="Price (lakhs)", scale=alt.Scale(zero=False)),
+                y=alt.Y("Future_price:Q", title="Estimated price in 5 years (lakhs)", scale=alt.Scale(zero=False)),
+                tooltip=[alt.Tooltip("Price:Q", format=",.1f"), alt.Tooltip("Future_price:Q", format=",.1f")],
+            ) + marker,
+            use_container_width=True,
+        )
+        st.caption("Red dashed line = your price. Only the price changes; every other input stays the same. "
+                   "Models are trained on a dataset whose targets are derived from price, size and location, "
                    "so treat results as a demo, not financial advice.")
 
 # ---------------------------------------------------------------- Market explorer
@@ -196,6 +308,31 @@ with tab_market:
         )
         st.caption(f"Showing the first {min(200, len(view))} of {len(view):,} matching properties.")
 
+# ---------------------------------------------------------------- EDA
+with tab_eda:
+    st.subheader("Exploratory data analysis")
+    question = st.selectbox("Choose a question", list(EDA_QUESTIONS))
+    chart_path = Path("reports") / EDA_QUESTIONS[question]
+    finding = get_finding(question.split(".")[0].replace("Q", ""))
+
+    col_chart, col_text = st.columns([3, 2])
+    with col_chart:
+        if chart_path.exists():
+            st.image(str(chart_path), width=620)
+        else:
+            st.warning(f"Chart not found: {chart_path}")
+    with col_text:
+        if finding:
+            st.markdown("**Finding**")
+            st.markdown(finding)
+        else:
+            st.info("No finding text for this question.")
+
+    findings_path = Path("reports") / "eda_findings.md"
+    if findings_path.exists():
+        with st.expander("Read all EDA findings"):
+            st.markdown(findings_path.read_text(encoding="utf-8"))
+
 # ---------------------------------------------------------------- Model insights
 with tab_model:
     st.subheader("Model comparison (test set, 50,000 rows)")
@@ -207,7 +344,7 @@ with tab_model:
         "ROC AUC": [0.9495, 0.9995, 1.0000],
     }), hide_index=True)
     b.dataframe(pd.DataFrame({
-        "Regressor": ["Ridge", "Random forest (best)", "Hist. gradient boosting"],
+        "Regressor": ["Ridge", "Random forest", "Hist. gradient boosting (deployed)"],
         "RMSE (lakhs)": [9.51, 0.36, 1.21],
         "MAE (lakhs)": [6.72, 0.22, 0.97],
         "R²": [0.9978, 1.0000, 1.0000],
